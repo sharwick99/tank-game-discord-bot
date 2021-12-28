@@ -1,12 +1,10 @@
-#written by sharwick99 on github
-#inspired by https://www.youtube.com/watch?v=aOYbR-Q_4Hs&t=3s&ab_channel=PeopleMakeGames
-
 import discord
 from discord.ext import commands, tasks
 from discord.ui import Button
 from discord.utils import get
 import random as rand
 import asyncio
+import datetime as datetime
 import math
 import json
 import emojis
@@ -57,6 +55,7 @@ rand.shuffle(board_coords)
 
 channel = None #setting global variables to avoid error
 board_string = ""
+leaderboard_embed = discord.Embed(title="Waiting for game to start...", color=0x5865F2)
 board_message = None
 game_state = "null"
 event_already_occurred = False
@@ -86,23 +85,74 @@ save_dict = { #template for the dictionary used in the save file
 }
 
 
-
-
-#fill these in with the respective values. if you only want to use one bot, you can just fill one in and only use that mode.
-#you can get ids by turning on developer mode in discord settings, then right clicking on the element you want in the app
-#for example, put the information for your test server in the "test_mode == True" category, and put the information for the actual bot and actual server in the "else" sectiom
 if test_mode == False:      #switches between the 2 bots, testing and normal
-    channel_id = 0
-    token = ""
-    guild_id = 0
-    admin_id = 0   #person who can start and end games
+    channel_id = 924811070504333404
+    token = "ODgzMzg2NDUwOTEyMTA0NDQ5.YTJLvg.Zd5TIg-Rkxsc1wgdBFGPlyNwMH4"
+    guild_id = 612757751021699094
+    admin_id = 446026808807260160   #person who can start and end games
     print("test mode FALSE")
 else:
-    channel_id = 0
-    token = ""
-    guild_id = 0
-    admin_id = 0
+    channel_id = 883385456249671751
+    token = "ODgzMzg2NjA4NDY2OTQ4MTQ3.YTJL4w.uh1I7oraO_d2oFujpMEAm2l1QPs"
+    guild_id = 869691297064161361
+    admin_id = 446026808807260160
     print("test mode TRUE")
+
+async def update_board_string(): #updates the board 
+    global board_string
+    global board_message
+
+    board_string = ""
+
+    for row in board:
+
+        for element in row:  #loops through each cell in the board
+
+            if element in users: #if it is a user id, set it as their emoji
+                board_string += users[element]["emoji"]
+            elif element == 0: #if it is 0, set it as fog
+                board_string += ":fog:"
+            elif element == 1: #if it is 1, set it as a heart
+                board_string += ":heart:"
+            else: #else, set as x (should never happen, just cautionary)
+                board_string += ":x:"
+
+        board_string += "\n"
+
+    try:
+        await board_message.edit(content=board_string) #edits message that holds the board (try statement because sometimes it lags and cant edit)
+    except:
+        pass
+
+async def update_leaderboard_embed(): #updates the leaderboardboard 
+    global leaderboard_embed
+    global leader_message
+
+    if game_state == "null": #only shows leaderboard if game is started
+        leaderboard_embed = discord.Embed(title="Waiting for game to start...", color=0x5865F2)
+    else:
+
+        sorted_users = {}
+
+        for user in users: #sorts calculates ap score for all users, puts it in a dict
+            ap_score = users[user]['hp'] * 3  + users[user]['ap'] + users[user]['range'] * 4 + users[user]['speed'] * 3
+            sorted_users[user] = ap_score
+
+        sorted_users = sorted(sorted_users.items(), key=lambda x: x[1], reverse=True) #sorts dictionary by highest ap score, returns list of tuples
+
+
+        leaderboard_embed = discord.Embed(title="Leaderboard", color=0x5865F2) #creates embed
+        for user in sorted_users: #creates each entry
+
+            user_object = client.get_user(user[0])
+            leaderboard_embed.add_field(name=f"{user_object.name} {users[user[0]]['emoji']} Score: {user[1]}", value=f"**HP:** {users[user[0]]['hp']} **AP:** {users[user[0]]['ap']} **Range:** {users[user[0]]['range']} **Speed:** {users[user[0]]['speed']}", inline=True)
+
+
+    try:
+        await leader_message.edit(embed=leaderboard_embed) #edits message that holds the leaderboard (try statement because sometimes it lags and cant edit)
+    except:
+        pass
+
 
 async def button_up(interaction): #moves the player up 1
     if interaction.user.id not in users:  #only allows users in the game to use the button
@@ -114,27 +164,30 @@ async def button_up(interaction): #moves the player up 1
     if users[interaction.user.id]["ap"] < 1:  #movement cost is 1 ap
         await channel.send("You do not have enough AP to do that")
         return
-    if users[interaction.user.id]["coords"]["y"] - users[interaction.user.id]["speed"] < 0: #prevents moving out of bounds
-        await channel.send("You cannot move out of bounds")
-        return
     for user in users: #prevents movement into other players squares
         if (users[interaction.user.id]["coords"]["y"] - users[interaction.user.id]["speed"], users[interaction.user.id]["coords"]["x"]) == (users[user]["coords"]["y"], users[user]["coords"]["x"]):
             await channel.send("You cannot move into another player's square")
             return
+    if users[interaction.user.id]["coords"]["y"] == 0: #prevents moving out of bounds
+        return
 
-    #checks if player is collecting a heart
-    if board[users[interaction.user.id]["coords"]["y"] - users[interaction.user.id]["speed"]][users[interaction.user.id]["coords"]["x"]] == 1:
+    
+    board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = 0 #sets board coordinate to 0 (0 represents fog)
+
+    if users[interaction.user.id]["coords"]["y"] - users[interaction.user.id]["speed"] < 0: #snaps player to border if they are moving out of bounds
+        users[interaction.user.id]["coords"]["y"] = 0
+    else:
+        users[interaction.user.id]["coords"]["y"] -= users[interaction.user.id]["speed"] #moves player according to their speed
+
+    if board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] == 1: #check if player is collecting a heart
         await channel.send(f"**{interaction.user.name}** has collected a heart!")
         users[interaction.user.id]["hp"] += 1
     
-
-
-    board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = 0 #sets board coordinate to 0 (0 represents fog)
-    users[interaction.user.id]["coords"]["y"] -= users[interaction.user.id]["speed"] #moves player according to their speed
     board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = interaction.user.id #sets new coords as their id (represents their emoji)
     users[interaction.user.id]["ap"] -= 1 #cost is 1 ap
 
     save() #saves to the save file and updates the board
+    await update_leaderboard_embed()
     await update_board_string()
 
 async def button_down(interaction): #see button_up for comments on the functionality
@@ -147,24 +200,30 @@ async def button_down(interaction): #see button_up for comments on the functiona
     if users[interaction.user.id]["ap"] < 1:
         await channel.send("You do not have enough AP to do that")
         return
-    if users[interaction.user.id]["coords"]["y"] + users[interaction.user.id]["speed"] > 12:
-        await channel.send("You cannot move out of bounds")
-        return
     for user in users:
         if (users[interaction.user.id]["coords"]["y"] + users[interaction.user.id]["speed"], users[interaction.user.id]["coords"]["x"]) == (users[user]["coords"]["y"], users[user]["coords"]["x"]):
             await channel.send("You cannot move into another player's square")
             return
+    if users[interaction.user.id]["coords"]["y"] == 12: #prevents moving out of bounds
+        return
 
-    if board[users[interaction.user.id]["coords"]["y"] + users[interaction.user.id]["speed"]][users[interaction.user.id]["coords"]["x"]] == 1:
+
+    board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = 0
+
+    if users[interaction.user.id]["coords"]["y"] + users[interaction.user.id]["speed"] > 12:
+        users[interaction.user.id]["coords"]["y"] = 12
+    else:
+        users[interaction.user.id]["coords"]["y"] += users[interaction.user.id]["speed"]
+
+    if board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] == 1:
         await channel.send(f"**{interaction.user.name}** has collected a heart!")
         users[interaction.user.id]["hp"] += 1
 
-    board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = 0
-    users[interaction.user.id]["coords"]["y"] += users[interaction.user.id]["speed"]
     board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = interaction.user.id
     users[interaction.user.id]["ap"] -= 1
 
     save()
+    await update_leaderboard_embed()
     await update_board_string()
 
 async def button_left(interaction): #see button_up for comments on the functionality
@@ -177,24 +236,30 @@ async def button_left(interaction): #see button_up for comments on the functiona
     if users[interaction.user.id]["ap"] < 1:
         await channel.send("You do not have enough AP to do that")
         return
-    if users[interaction.user.id]["coords"]["x"] - users[interaction.user.id]["speed"] < 0:
-        await channel.send("You cannot move out of bounds")
-        return
     for user in users:
         if (users[interaction.user.id]["coords"]["y"], users[interaction.user.id]["coords"]["x"] - users[interaction.user.id]["speed"]) == (users[user]["coords"]["y"], users[user]["coords"]["x"]):
             await channel.send("You cannot move into another player's square")
             return
+    if users[interaction.user.id]["coords"]["x"] == 0: #prevents moving out of bounds
+        return
 
-    if board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"] - users[interaction.user.id]["speed"]] == 1:
+
+    board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = 0
+
+    if users[interaction.user.id]["coords"]["x"] - users[interaction.user.id]["speed"] < 0:
+        users[interaction.user.id]["coords"]["x"] = 0
+    else:
+        users[interaction.user.id]["coords"]["x"] -= users[interaction.user.id]["speed"]
+
+    if board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] == 1:
         await channel.send(f"**{interaction.user.name}** has collected a heart!")
         users[interaction.user.id]["hp"] += 1
 
-    board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = 0
-    users[interaction.user.id]["coords"]["x"] -= users[interaction.user.id]["speed"]
     board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = interaction.user.id
     users[interaction.user.id]["ap"] -= 1
 
     save()
+    await update_leaderboard_embed()
     await update_board_string()
 
 async def button_right(interaction): #see button_up for comments on the functionality
@@ -207,24 +272,29 @@ async def button_right(interaction): #see button_up for comments on the function
     if users[interaction.user.id]["ap"] < 1:
         await channel.send("You do not have enough AP to do that")
         return
-    if users[interaction.user.id]["coords"]["x"] + users[interaction.user.id]["speed"] > 12:
-        await channel.send("You cannot move out of bounds")
-        return
     for user in users:
         if (users[interaction.user.id]["coords"]["y"], users[interaction.user.id]["coords"]["x"] + users[interaction.user.id]["speed"]) == (users[user]["coords"]["y"], users[user]["coords"]["x"]):
             await channel.send("You cannot move into another player's square")
             return
-
-    if board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"] + users[interaction.user.id]["speed"]] == 1:
-        await channel.send(f"**{interaction.user.name}** has collected a heart!")
-        users[interaction.user.id]["hp"] += 1
+    if users[interaction.user.id]["coords"]["x"] == 12: #prevents moving out of bounds
+        return
 
     board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = 0
-    users[interaction.user.id]["coords"]["x"] += users[interaction.user.id]["speed"]
+
+    if users[interaction.user.id]["coords"]["x"] + users[interaction.user.id]["speed"] > 12:
+        users[interaction.user.id]["coords"]["x"] = 12
+    else:
+        users[interaction.user.id]["coords"]["x"] += users[interaction.user.id]["speed"]
+
+    if board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] == 1:
+        await channel.send(f"**{interaction.user.name}** has collected a heart!")
+        users[interaction.user.id]["hp"] += 1
+    
     board[users[interaction.user.id]["coords"]["y"]][users[interaction.user.id]["coords"]["x"]] = interaction.user.id
     users[interaction.user.id]["ap"] -= 1
 
     save()
+    await update_leaderboard_embed()
     await update_board_string()
 
 async def upgrade_range(interaction): #upgrades the players range by 1
@@ -234,16 +304,17 @@ async def upgrade_range(interaction): #upgrades the players range by 1
     if game_state != "started": #only allows pressing if game is started
         await channel.send("The game has not started yet")
         return
-    if users[interaction.user.id]["ap"] < 3: #cost is 3 ap
+    if users[interaction.user.id]["ap"] < 4: #cost is 4 ap
         await channel.send("You do not have enough AP to do that")
         return
 
     users[interaction.user.id]["range"] += 1 #adds 1 to range
-    users[interaction.user.id]["ap"] -= 3 #cost is 3 ap
+    users[interaction.user.id]["ap"] -= 4 #cost is 4 ap
 
     await channel.send(f"**{interaction.user.name}** upgraded their range to {users[interaction.user.id]['range']}") #sends confirmation message
 
     save() #saves to the save file and updates the board
+    await update_leaderboard_embed()
     await update_board_string()
 
 async def upgrade_speed(interaction): #see upgrade_range for comments on the functionality
@@ -263,6 +334,7 @@ async def upgrade_speed(interaction): #see upgrade_range for comments on the fun
     await channel.send(f"**{interaction.user.name}** upgraded their speed to {users[interaction.user.id]['speed']}")
 
     save() #saves to the save file and updates the board
+    await update_leaderboard_embed()
     await update_board_string()
 
 async def upgrade_hp(interaction): #see upgrade_range for comments on the functionality
@@ -282,6 +354,7 @@ async def upgrade_hp(interaction): #see upgrade_range for comments on the functi
     await channel.send(f"**{interaction.user.name}** bought a heart, increasing their HP to {users[interaction.user.id]['hp']}")
 
     save() #saves to the save file and updates the board
+    await update_leaderboard_embed
     await update_board_string()
 
 async def button_shoot(interaction): #shoots closest player
@@ -302,17 +375,16 @@ async def button_shoot(interaction): #shoots closest player
 
         # if the user is within the players range, add the distance to the users in range dictionary. keys are id, values are distance
         if abs(users[interaction.user.id]["coords"]["x"] - users[user]["coords"]["x"]) <= users[interaction.user.id]["range"] and abs(users[interaction.user.id]["coords"]["y"] - users[user]["coords"]["y"]) <= users[interaction.user.id]["range"]:
-            users_in_range[user] = math.sqrt(abs(((users[interaction.user.id]["coords"]["x"] - users[user]["coords"]["x"]) ^ 2) + ((users[interaction.user.id]["coords"]["y"] - users[user]["coords"]["y"]) ^ 2)))
+            users_in_range[user] = math.sqrt(   ( (users[interaction.user.id]["coords"]["x"] - users[user]["coords"]["x"]) ** 2) + ( (users[interaction.user.id]["coords"]["y"] - users[user]["coords"]["y"]) ** 2)   )
 
     if len(users_in_range) == 0: #if there is nobody in the range
         await channel.send("Nobody is in your range")
         return
 
     #sorts through the users in range dict and finds the closest player
-    closest_user = list(users_in_range.keys())[0] #first player in range
-    for user in users_in_range: #loops through all players in range, finds the one with the least distance
-        if users_in_range[user] < users_in_range[closest_user]:
-            closest_user = user
+    sorted_users = sorted(users_in_range.items(), key=lambda x: x[1]) #sorts dictionary by lowest distance, returns list of tuples
+
+    closest_user = sorted_users[0][0]
 
     users[interaction.user.id]["ap"] -= 1 #cost is 1 ap
     users[closest_user]["hp"] -= 1 #takes away targets health
@@ -331,11 +403,13 @@ async def button_shoot(interaction): #shoots closest player
         if len(users) == 1: #checks if that was the last player alive
             await channel.send(f":trophy::trophy::trophy:  **{interaction.user.name} won!!!**  :trophy::trophy::trophy:")
             
+        await update_leaderboard_embed()
         await update_board_string() #saves and updates
         save()
     else:
         await channel.send(f":broken_heart: **{interaction.user.name}** shot **{user_object.name}**") #send confirmation message
  
+        await update_leaderboard_embed()
         await update_board_string() #saves and updates
         save()
 
@@ -353,16 +427,16 @@ async def button_give(interaction): #see button_shoot  for comments on the funct
             continue
     
         if abs(users[interaction.user.id]["coords"]["x"] - users[user]["coords"]["x"]) <= users[interaction.user.id]["range"] and abs(users[interaction.user.id]["coords"]["y"] - users[user]["coords"]["y"]) <= users[interaction.user.id]["range"]:
-            users_in_range[user] = math.sqrt(abs(((users[interaction.user.id]["coords"]["x"] - users[user]["coords"]["x"]) ^ 2) + ((users[interaction.user.id]["coords"]["y"] - users[user]["coords"]["y"]) ^ 2)))
+            users_in_range[user] = math.sqrt(   ( (users[interaction.user.id]["coords"]["x"] - users[user]["coords"]["x"]) ** 2) + ( (users[interaction.user.id]["coords"]["y"] - users[user]["coords"]["y"]) ** 2)   )
 
     if len(users_in_range) == 0:
         await channel.send("Nobody is in your range")
         return
 
-    closest_user = list(users_in_range.keys())[0]
-    for user in users_in_range:
-        if users_in_range[user] < users_in_range[closest_user]:
-            closest_user = user
+    #sorts through the users in range dict and finds the closest player
+    sorted_users = sorted(users_in_range.items(), key=lambda x: x[1]) #sorts dictionary by lowest distance, returns list of tuples
+
+    closest_user = sorted_users[0][0]
 
     users[interaction.user.id]["ap"] -= 1
     users[closest_user]["ap"] += 1
@@ -371,22 +445,8 @@ async def button_give(interaction): #see button_shoot  for comments on the funct
 
     await channel.send(f":dizzy: **{interaction.user.name}** gave 1 AP to **{user_object.name}**")
 
-async def button_leaderboard(interaction):
-
-    if interaction.user.id not in users:
-        await channel.send("You must join the game before you can do that")
-        return
-    if game_state != "started":
-        await channel.send("The game has not started yet")
-        return
-
-    if game_state != "null":
-        leaderboard_string = "Leaderboard (Not Sorted)"
-        for user in users:
-            user_object = client.get_user(user)
-            leaderboard_string += f"\n**{user_object.name}**:  Emoji: {users[user]['emoji']}  HP: {users[user]['hp']}  AP: {users[user]['ap']}  Range: {users[user]['range']}  Speed: {users[user]['speed']}"
-        print(leaderboard_string)
-        await channel.send(leaderboard_string)
+    await update_leaderboard_embed()
+    save()
 
 
 def view_init(): #view is a message component that holds the buttons, this function initializes and returns the buttons for the message
@@ -403,7 +463,7 @@ def view_init(): #view is a message component that holds the buttons, this funct
     right_button = discord.ui.Button(style=discord.ButtonStyle.primary, emoji="➡️")
     right_button.callback = button_right
 
-    range_button = discord.ui.Button(label="Upgrade Range (3 AP)", style=discord.ButtonStyle.green, emoji="⏫")
+    range_button = discord.ui.Button(label="Upgrade Range (4 AP)", style=discord.ButtonStyle.green, emoji="⏫")
     range_button.callback = upgrade_range
 
     speed_button = discord.ui.Button(label="Upgrade Speed (3 AP)", style=discord.ButtonStyle.green, emoji="⏫")
@@ -418,15 +478,12 @@ def view_init(): #view is a message component that holds the buttons, this funct
     shoot_button = discord.ui.Button(label="Shoot Closest", style=discord.ButtonStyle.danger, emoji="🗡️")
     shoot_button.callback = button_shoot
 
-    leaderboard_button = discord.ui.Button(label="Leaderboard", style=discord.ButtonStyle.secondary, emoji="📜")
-    leaderboard_button.callback = button_leaderboard
 
     view = discord.ui.View()
     view.add_item(left_button)
     view.add_item(up_button)
     view.add_item(down_button)
     view.add_item(right_button)
-    view.add_item(leaderboard_button)
     view.add_item(heart_button)
     view.add_item(range_button)
     view.add_item(speed_button)
@@ -498,38 +555,13 @@ def reset(): #resets the game
 
     save()
 
-async def update_board_string(): #updates the board 
-    global board_string
-    global board_message
-
-    board_string = ""
-
-    for row in board:
-
-        for element in row:  #loops through each cell in the board
-
-            if element in users: #if it is a user id, set it as their emoji
-                board_string += users[element]["emoji"]
-            elif element == 0: #if it is 0, set it as fog
-                board_string += ":fog:"
-            elif element == 1: #if it is 1, set it as a heart
-                board_string += ":heart:"
-            else: #else, set as x (should never happen, just cautionary)
-                board_string += ":x:"
-
-        board_string += "\n"
-
-    try:
-        await board_message.edit(content=board_string) #edits message that holds the board (try statement because sometimes it lags and cant edit)
-    except:
-        pass
-
 
 @client.event
 async def on_ready():
     global board
     global channel
     global board_message
+    global leader_message
     global users
     global board_string
 
@@ -554,6 +586,7 @@ async def on_ready():
         heart_event.change_interval(seconds=heart_delay)
         heart_event.start()
 
+    leader_message = await channel.send(embed=leaderboard_embed) #sends original leaderboard message, board message is the message that is edited to show the leaderboard
     board_message = await channel.send("Loading...", view=view_init()) #sends original board message, board message is the message that is edited to show the board
     await update_board_string()
     
@@ -561,19 +594,26 @@ async def on_ready():
 async def on_message(message):
     global channel
     global board_message
+    global leader_message
 
     if(message.author.bot): #if message is sent by a bot, return to avoid a loop of message sending from the bot
         return
 
+    if message.channel.id != channel_id and message.content.startswith("!"): #makes it so that the bot only works in desired channel
+        await message.channel.send("Please use the Tank Tactics text channel for commands")
+        return
+
+    if message.channel.id != channel_id:
+        return
+
     try:
+        await leader_message.delete() #makes it so that the value_message is always visible in the channel, deletes it and resends it
+        leader_message = await channel.send(embed=leaderboard_embed)
+
         await board_message.delete() #makes it so that the value_message is always visible in the channel, deletes it and resends it
         board_message = await channel.send(board_string, view=view_init())
     except:
         pass
-
-    if message.channel.id != channel_id and message.content.startswith("!"): #makes it so that the bot only works in desired channel
-        await message.channel.send("Please use the Tank Tactics text channel for commands")
-        return
 
     await client.process_commands(message) #makes it so that the bot can still process commands
         
@@ -625,6 +665,8 @@ async def start(ctx, amount: int = None, units = None, heart_multiplier: int = N
         heart_event.change_interval(seconds=heart_delay)
         heart_event.start()
 
+        await update_leaderboard_embed()
+
     elif game_state == "started":
         await channel.send("Game has already been started")
 
@@ -641,8 +683,10 @@ async def end(ctx):
     heart_event.stop()
 
     reset() #resets game
+    await update_leaderboard_embed()
     await update_board_string()
     await channel.send("Game ended") #confirmation message
+
 
 @client.command()
 async def join(ctx, emoji : str = None): #joins game if in lobby phase
@@ -662,16 +706,20 @@ async def join(ctx, emoji : str = None): #joins game if in lobby phase
         await channel.send("Please choose an emoji to play with")
         return
 
-    if emoji == ":heart:": #cannot use heart because it spawns in the map
-        await channel.send("You cannot use the heart emoji")
-        return
 
-    if emoji == ":fog:": #cannot use fog because that is the background
-        await channel.send("You cannot use the fog emoji")
-        return
 
     if emojis.count(emoji) == 1:
         emoji = list(emojis.get(emoji))[0] #removes everything but the emoji and sets it to the emoji variable
+
+        if emoji == "❤️": #cannot use heart because it spawns in the map
+            await channel.send("You cannot use the heart emoji")
+            return
+
+        if emoji == "🌫️": #cannot use fog because that is the background
+            await channel.send("You cannot use the fog emoji")
+            return
+
+
 
         for user in users: #cannot choose an emoji someone else chose
             if emoji == users[user]["emoji"]:
@@ -696,6 +744,7 @@ async def join(ctx, emoji : str = None): #joins game if in lobby phase
     board[users[ctx.author.id]["coords"]["y"]][users[ctx.author.id]["coords"]["x"]] = ctx.author.id #sets board position to id
 
     save() #saves and updates board
+    await update_leaderboard_embed()
     await update_board_string()
 
 
@@ -733,6 +782,7 @@ async def up(ctx, amount: int = 1): #only thing different is that amount can be 
     users[ctx.author.id]["ap"] -= 1
 
     save()
+    await update_leaderboard_embed()
     await update_board_string()
 
 @client.command() 
@@ -768,6 +818,7 @@ async def down(ctx, amount: int = 1): #see up() for comments on functionality
     users[ctx.author.id]["ap"] -= 1
 
     save()
+    await update_leaderboard_embed()
     await update_board_string()
 
 @client.command()
@@ -803,6 +854,7 @@ async def left(ctx, amount: int = 1): #see up() for comments on functionality
     users[ctx.author.id]["ap"] -= 1
 
     save()
+    await update_leaderboard_embed()
     await update_board_string()
 
 @client.command()
@@ -837,22 +889,8 @@ async def right(ctx, amount: int = 1): #see up() for comments on functionality
     users[ctx.author.id]["ap"] -= 1
 
     save()
+    await update_leaderboard_embed()
     await update_board_string()
-
-@client.command()
-async def stats(ctx, user: discord.Member = None): #prints user stats
-
-    if ctx.author.id not in users: #you can only check stats if user joined
-        await channel.send("You must join the game before you can do that")
-        return
-    if game_state == "null": #only checkable if game is in lobby/started phase
-        await channel.send("The game has not started yet")
-        return
-
-    if user == None: #sends own stats
-        await channel.send(f"\n**{ctx.author.name}**:  Emoji: {users[ctx.author.id]['emoji']}  HP: {users[ctx.author.id]['hp']}  AP: {users[ctx.author.id]['ap']}  Range: {users[ctx.author.id]['range']}  Speed: {users[ctx.author.id]['speed']}")
-    else: #if a parameter is given, send that players stats
-        await channel.send(f"\n**{user.name}**:  Emoji: {users[user.id]['emoji']}  HP: {users[user.id]['hp']}  AP: {users[user.id]['ap']}  Range: {users[user.id]['range']}  Speed: {users[user.id]['speed']}")
 
 
 @client.command() #see button_give for comments on functionality
@@ -882,6 +920,7 @@ async def give(ctx, amount: int, member: discord.Member): #only difference is th
         users[ctx.author.id]["ap"] -= amount
         users[member.id]["ap"] += amount
         await channel.send(f":dizzy: **{ctx.author.name}** gave {amount} AP to **{member.name}**")
+        await update_leaderboard_embed()
         save() #saves to save file
     else:
         await channel.send("You do not have enough AP to give that amount.")
@@ -923,6 +962,7 @@ async def shoot(ctx, member: discord.Member = None): #only difference is that yo
             await channel.send(f":trophy::trophy::trophy:  **{ctx.author.name} won!!!**  :trophy::trophy::trophy:")
             await update_board_string()
             
+        await update_leaderboard_embed()
         await update_board_string()
         save()
         
@@ -931,6 +971,7 @@ async def shoot(ctx, member: discord.Member = None): #only difference is that yo
     else:
         await channel.send(f":broken_heart: **{ctx.author.name}** shot **{user_object.name}**")
 
+        await update_leaderboard_embed()
         await update_board_string()
         save()
 
@@ -953,7 +994,6 @@ async def commandlist(ctx):  #sends a list of commands
     command_string += "\n:arrow_down: - move down by speed"
     command_string += "\n:arrow_left: - move left by speed"
     command_string += "\n:arrow_right: - move right by speed"
-    command_string += "\n:scroll: Leaderboard - shows all player stats"
     command_string += "\n:heart: - buy a heart for 3 AP, increasing HP by 1"
     command_string += "\n:arrow_double_up: Range - increase Range by 1, costing 3 AP"
     command_string += "\n:arrow_double_up: Speed - increase Speed by 1, costing 3 AP"
@@ -972,6 +1012,7 @@ async def ap_event(): #gives everyone an ap
     for user in users:
         users[user]["ap"] += 1
     await channel.send(":white_check_mark: AP has been distributed")
+    await update_leaderboard_embed()
     save()
 
 @tasks.loop(seconds=10) #10 is placeholder amount, it gets changed
@@ -1000,6 +1041,7 @@ async def heart_event(): #spawns a heart at random location
 async def addap(ctx): #debug command
     if ctx.author.id == admin_id:
         users[ctx.author.id]["ap"] += 100
+        await update_leaderboard_embed()
     else:
         return
 
@@ -1008,4 +1050,7 @@ async def ping(ctx): #basic ping command (used for debug)
     await channel.send("pong")
 
 
+
 client.run(token) #token
+#ODY5MDIzNjI0NTg4MzA0NDA0.YP4LUQ.Fd5hstRwfoj1p91gcq-nLBkYLjo - main
+#ODY5NjkyMDY5OTAyNDUwNzcw.YQB52w.ifPKPtouX32zOC2pBFgbinC5llA - test
