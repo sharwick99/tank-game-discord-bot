@@ -1,3 +1,6 @@
+#written by sharwick99 on github
+#inspired by https://www.youtube.com/watch?v=aOYbR-Q_4Hs&t=3s&ab_channel=PeopleMakeGames
+
 import discord
 from discord.ext import commands, tasks
 from discord.ui import Button
@@ -11,7 +14,7 @@ import emojis
 import copy
 
 
-test_mode = True    #switches between bots, used for testing
+test_mode = False    #switches between bots, used for testing
 
 
 #discord bot, sets up bot
@@ -84,18 +87,20 @@ save_dict = { #template for the dictionary used in the save file
     "time_delay": None
 }
 
-
+#fill these in with the respective values. if you only want to use one bot, you can just fill one in and only use that mode.
+#you can get ids by turning on developer mode in discord settings, then right clicking on the element you want in the app
+#for example, put the information for your test server in the "test_mode == True" category, and put the information for the actual bot and actual server in the "else" section
 if test_mode == False:      #switches between the 2 bots, testing and normal
-    channel_id = 924811070504333404
-    token = "ODgzMzg2NDUwOTEyMTA0NDQ5.YTJLvg.Zd5TIg-Rkxsc1wgdBFGPlyNwMH4"
-    guild_id = 612757751021699094
-    admin_id = 446026808807260160   #person who can start and end games
+    channel_id = 0
+    token = ""
+    guild_id = 0
+    admin_id = 0   #person who can start and end games
     print("test mode FALSE")
 else:
-    channel_id = 883385456249671751
-    token = "ODgzMzg2NjA4NDY2OTQ4MTQ3.YTJL4w.uh1I7oraO_d2oFujpMEAm2l1QPs"
-    guild_id = 869691297064161361
-    admin_id = 446026808807260160
+    channel_id = 0
+    token = ""
+    guild_id = 0
+    admin_id = 0
     print("test mode TRUE")
 
 async def update_board_string(): #updates the board 
@@ -1049,8 +1054,4 @@ async def addap(ctx): #debug command
 async def ping(ctx): #basic ping command (used for debug)
     await channel.send("pong")
 
-
-
 client.run(token) #token
-#ODY5MDIzNjI0NTg4MzA0NDA0.YP4LUQ.Fd5hstRwfoj1p91gcq-nLBkYLjo - main
-#ODY5NjkyMDY5OTAyNDUwNzcw.YQB52w.ifPKPtouX32zOC2pBFgbinC5llA - test
